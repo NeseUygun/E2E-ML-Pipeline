@@ -84,9 +84,7 @@ class DatasetIO:
 
     def __validate_parameters(self):
         if not isinstance(self.data_path, str):
-            raise TypeError(
-                f"Expected data_path as str, but found {type(self.data_path)}"
-            )
+            raise TypeError(f"Expected data_path as str, found {type(self.data_path)}")
 
         if self.data_path_extension not in ALLOWED_EXTENSIONS:
             raise ValueError(f"Expected csv file, found {self.data_path_extension}")
