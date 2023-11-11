@@ -3,14 +3,38 @@ import os
 import pandas as pd
 
 from e2.utils.data_validations import validate_data
+from e2.utils.logging_utils import get_logger
 
 ALLOWED_EXTENSIONS = [".csv", ".txt", ".parquet", ".xlsx", ".json"]
 EXPECTED_COLS = [
-    "sepal length",
-    "sepal width",
-    "petal length",
-    "petal width",
-    "class",
+    "ID",
+    "Customer_ID",
+    "Month",
+    "Name",
+    "Age",
+    "SSN",
+    "Occupation",
+    "Annual_Income",
+    "Monthly_Inhand_Salary",
+    "Num_Bank_Accounts",
+    "Num_Credit_Card",
+    "Interest_Rate",
+    "Num_of_Loan",
+    "Type_of_Loan",
+    "Delay_from_due_date",
+    "Num_of_Delayed_Payment",
+    "Changed_Credit_Limit",
+    "Num_Credit_Inquiries",
+    "Credit_Mix",
+    "Outstanding_Debt",
+    "Credit_Utilization_Ratio",
+    "Credit_History_Age",
+    "Payment_of_Min_Amount",
+    "Total_EMI_per_month",
+    "Amount_invested_monthly",
+    "Payment_Behaviour",
+    "Monthly_Balance",
+    "Credit_Score",
 ]
 
 DATA_READ_MAPPING = {
@@ -34,8 +58,10 @@ class DatasetIO:
     def __init__(self, data_path: str):
         """Constructor the for the class."""
         self.data_path = data_path
-        self.data_path_extension = os.path.splitext(data_path)[-1]
-        self.__validate_parameters()
+
+        self.data_path_extension = self.__validate_parameters_and_return_ext()
+
+        self.logger = get_logger(__name__, "logs/log_details.log")
 
     def read_data(self) -> pd.DataFrame:
         """Reads the data from the path.
@@ -46,14 +72,15 @@ class DatasetIO:
         Raises:
             - ValueError: If the extension is not supported.
         """
-
+        self.logger.info(f"Reading data from {self.data_path}.")
         read_func = DATA_READ_MAPPING.get(self.data_path_extension, None)
         if read_func is None:
-            raise ValueError(
-                f"Received invalid extension, found {self.data_path_extension}."
-            )
+            error_msg = f"\tReceived invalid extension, found {self.data_path_extension}."
+            self.logger.error(error_msg)
+            raise ValueError(error_msg)
 
-        data = read_func(self.data_path)
+        data = read_func(self.data_path, low_memory=False)
+        self.logger.info("\tData read successfully.")
 
         validate_data(data, EXPECTED_COLS)
 
@@ -82,9 +109,13 @@ class DatasetIO:
 
         save_func(save_path, index=False)
 
-    def __validate_parameters(self):
+    def __validate_parameters_and_return_ext(self):
         if not isinstance(self.data_path, str):
             raise TypeError(f"Expected data_path as str, found {type(self.data_path)}")
 
-        if self.data_path_extension not in ALLOWED_EXTENSIONS:
-            raise ValueError(f"Expected csv file, found {self.data_path_extension}")
+        extension = os.path.splitext(self.data_path)[-1]
+
+        if extension not in ALLOWED_EXTENSIONS:
+            raise ValueError(f"Expected csv file, found {extension}")
+
+        return extension
