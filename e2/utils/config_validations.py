@@ -1,11 +1,12 @@
-import typing
-from typing import Dict, Union
+from typing import Union
 
 from pydantic import BaseModel
 
 
 class ModelParameters(BaseModel):
-    __annotations__ = Dict[str, typing.Union[int, float]]
+    max_depth: int
+    random_state: int
+    n_estimators: Union[int, None] = None
 
 
 class ParametersTraining(BaseModel):
@@ -15,7 +16,6 @@ class ParametersTraining(BaseModel):
 
 
 class ModelConfig(BaseModel):
-    name: str
     hyperparameters: ModelParameters
     parameters_training: ParametersTraining
 

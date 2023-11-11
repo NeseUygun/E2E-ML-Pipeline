@@ -1,4 +1,5 @@
 import pickle
+from typing import Dict, Union
 
 import numpy as np
 import pandas as pd
@@ -52,17 +53,34 @@ class TrainModel:
         Returns:
             None
         """
-        for model in self.config["model"]:
-            print(model["name"], "--", model["hyperparameters"])
-            print()
+        for model in self.config:
+            hyperparameters = self.config[model]["hyperparameters"]
+            current_model = model_mapping.get(model, None)(**hyperparameters)
+            self.logger.info(f"Training model: {model}")
+
+            if current_model is None:
+                error_msg = f"\tModel {model} not supported."
+                self.logger.error(error_msg)
+                raise ValueError(error_msg)
+            model_pipeline = Pipeline(
+                steps=[("preprocessor", preprocess_pipeline), ("model", current_model)]
+            )
+            self._train_model(
+                X_train=X_train,
+                y_train=y_train,
+                model_pipeline=model_pipeline,
+                parameters_training=self.config[model]["parameters_training"],
+                model_save_path=model_save_path,
+            )
+            self.logger.info(f"\tModel {model} training completed.")
+        self.logger.info("All models training completed.")
 
     def _train_model(
         self,
         X_train: pd.DataFrame,
         y_train: pd.Series,
-        preprocess_pipeline: ColumnTransformer,
-        # model_pipeline: Pipeline,
-        # parameters_training: Dict[str, Union[int, float, bool]],
+        model_pipeline: Pipeline,
+        parameters_training: Dict[str, Union[int, float, bool]],
         # hyperparameters: Dict[str, Union[
         #    int, List[int], float, List[float], str, List[str], bool, List[bool]]],
         model_save_path: str,
@@ -71,9 +89,9 @@ class TrainModel:
         Args:
             X_train: Training data
             y_train: Training labels
-            preprocess_pipeline: Preprocessing pipeline
-                model_pipeline: Model pipeline
-                parameters_training: Training parameters such as cv_folds,
+            model_pipeline: Model pipeline
+            parameters_training: Training parameters such as cv_folds, overfitting
+                threshold
                 hyperparameters: Model hyperparametersi can be a list of values or a
                 single value. If a list of values is provided, optuna will be used to
                 tune the hyperparameters.
@@ -87,20 +105,14 @@ class TrainModel:
         # )
 
         self.logger.info("Training the model.")
-        cv_folds = self.config["parameters_training"].get("cv_fold", None)
-
-        model_pipeline = Pipeline(
-            steps=[("preprocessor", preprocess_pipeline), ("model", self.model)]
-        )
+        cv_folds = parameters_training.get("cv_fold", None)
+        overfitting_threshold = parameters_training.get("overfitting_threshold", 0.1)
 
         if cv_folds != 0:
             if cv_folds < 2:
                 error_msg = "\tPlease provide a value greater than 1 for cv_folds."
                 self.logger.error(error_msg)
                 raise ValueError(error_msg)
-            overfitting_threshold = self.config["parameters_training"].get(
-                "overfitting_threshold", 0.1
-            )
 
             cv_scores = cross_val_score(model_pipeline, X_train, y_train, cv=cv_folds)
             print(f"{cv_folds} CV mean scores: {np.mean(cv_scores)}")
@@ -108,8 +120,8 @@ class TrainModel:
             std_scores = np.std(cv_scores)
             if std_scores > overfitting_threshold:
                 error_msg = (
-                    f"Model is overfitting with std: {std_scores} > "
-                    f"threshold: {overfitting_threshold} in {cv_folds} CV folds."
+                    f"\tModel is overfitting with std: {std_scores} > "
+                    f"\tthreshold: {overfitting_threshold} in {cv_folds} CV folds."
                 )
                 self.logger.error(error_msg)
                 raise ValueError(error_msg)
