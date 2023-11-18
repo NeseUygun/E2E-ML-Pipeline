@@ -1,19 +1,21 @@
 import pickle
-from typing import Dict, Union
+from typing import Dict, List, Union
 
-import numpy as np
+import mlflow.sklearn
+import optuna
 import pandas as pd
 import yaml
 from sklearn.compose import ColumnTransformer
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.exceptions import NotFittedError
 from sklearn.metrics import classification_report
-from sklearn.model_selection import cross_val_score
 from sklearn.pipeline import Pipeline
 from sklearn.tree import DecisionTreeClassifier
 
-from ..utils.config_validations import ModelsConfig as ConfigValidator
-from ..utils.logging_utils import get_logger
+from e2.model_training.hyperparam_opt import OptunaConfig
+
+# from e2.utils.config_validations import ModelsConfig as ConfigValidator
+from e2.utils.logging_utils import get_logger
 
 UNWANTED_METRICS = ["accuracy", "macro avg", "weighted avg"]
 
@@ -22,15 +24,17 @@ model_mapping = {
     "DecisionTreeClassifier": DecisionTreeClassifier,
 }
 
+mlflow.set_experiment("end-to-end-ml")
+
 
 class TrainModel:
     def __init__(self, config_path: str) -> None:
         with open(config_path, "r") as file:
             config = yaml.safe_load(file)
-        validator = ConfigValidator(**config["model"])
+        # validator = ConfigValidator(**config["model"])
 
         # validated config
-        self.config = validator.model_dump()
+        self.config = config["model"]  # validator.model_dump()
 
         self.logger = get_logger(__name__, "logs/log_details.log")
 
@@ -54,14 +58,18 @@ class TrainModel:
             None
         """
         for model in self.config:
-            hyperparameters = self.config[model]["hyperparameters"]
-            current_model = model_mapping.get(model, None)(**hyperparameters)
+            hyperparameters = self.config.get(model).get("hyperparameters", None)
+            current_model = model_mapping.get(model, None)()
             self.logger.info(f"Training model: {model}")
 
-            if current_model is None:
-                error_msg = f"\tModel {model} not supported."
+            if current_model is None or hyperparameters is None:
+                error_msg = (
+                    f"\tModel {model} not in the model mapping or"
+                    f"hyperparameters not found in the config."
+                )
                 self.logger.error(error_msg)
                 raise ValueError(error_msg)
+
             model_pipeline = Pipeline(
                 steps=[("preprocessor", preprocess_pipeline), ("model", current_model)]
             )
@@ -70,6 +78,7 @@ class TrainModel:
                 y_train=y_train,
                 model_pipeline=model_pipeline,
                 parameters_training=self.config[model]["parameters_training"],
+                hyperparameters=hyperparameters,
                 model_save_path=model_save_path,
             )
             self.logger.info(f"\tModel {model} training completed.")
@@ -81,8 +90,10 @@ class TrainModel:
         y_train: pd.Series,
         model_pipeline: Pipeline,
         parameters_training: Dict[str, Union[int, float, bool]],
-        # hyperparameters: Dict[str, Union[
-        #    int, List[int], float, List[float], str, List[str], bool, List[bool]]],
+        hyperparameters: Dict[
+            str,
+            Union[int, List[int], float, List[float], str, List[str], bool, List[bool]],
+        ],
         model_save_path: str,
     ) -> None:
         """Methods to train the model and print the cross validation scores.
@@ -92,7 +103,7 @@ class TrainModel:
             model_pipeline: Model pipeline
             parameters_training: Training parameters such as cv_folds, overfitting
                 threshold
-                hyperparameters: Model hyperparametersi can be a list of values or a
+            hyperparameters: Model hyperparametersi can be a list of values or a
                 single value. If a list of values is provided, optuna will be used to
                 tune the hyperparameters.
             model_save_path: Path to save the model
@@ -100,13 +111,13 @@ class TrainModel:
         Returns:
             None
         """
-        # optimization_required = any(
-        #    isinstance(value, list) for value in hyperparameters.values()
-        # )
-
         self.logger.info("Training the model.")
-        cv_folds = parameters_training.get("cv_fold", None)
-        overfitting_threshold = parameters_training.get("overfitting_threshold", 0.1)
+
+        optimization_required = any(
+            isinstance(value, list) for value in hyperparameters.values()
+        )
+
+        cv_folds = parameters_training.get("cv_folds", None)
 
         if cv_folds != 0:
             if cv_folds < 2:
@@ -114,24 +125,38 @@ class TrainModel:
                 self.logger.error(error_msg)
                 raise ValueError(error_msg)
 
-            cv_scores = cross_val_score(model_pipeline, X_train, y_train, cv=cv_folds)
-            print(f"{cv_folds} CV mean scores: {np.mean(cv_scores)}")
+        # overfitting_threshold = parameters_training.get("overfitting_threshold", 0.1)
 
-            std_scores = np.std(cv_scores)
-            if std_scores > overfitting_threshold:
-                error_msg = (
-                    f"\tModel is overfitting with std: {std_scores} > "
-                    f"\tthreshold: {overfitting_threshold} in {cv_folds} CV folds."
-                )
-                self.logger.error(error_msg)
-                raise ValueError(error_msg)
+        if optimization_required:
+            optuna_config = OptunaConfig(
+                hyperparameters=hyperparameters,
+                cv_folds=cv_folds,
+                scoring="f1_macro",
+            )
+
+            objective = optuna_config.get_objective(
+                X_train=X_train,
+                y_train=y_train,
+                model_pipeline=model_pipeline,
+            )
+            study = optuna.create_study(direction="maximize")
+            study.optimize(objective, n_trials=10)
+
+            best_parameters = study.best_params
+            model_pipeline.set_params(**best_parameters)
+        else:
+            model_pipeline.steps[-1][-1].set_params(**hyperparameters)
 
         pipeline = model_pipeline.fit(X_train, y_train)
 
         # save the pipeline
+        self.model_save(model_save_path, pipeline)
+
+        self.logger.info("Model training completed.")
+
+    def model_save(self, model_save_path, pipeline):
         with open(model_save_path, "wb") as file:
             pickle.dump(pipeline, file)
-        self.logger.info("Model training completed.")
 
     def evaluate_model(
         self, X_test: pd.DataFrame, y_test: pd.Series, save_path: str
@@ -168,16 +193,4 @@ class TrainModel:
                 error_msg = "Please provide a valid csv file path."
                 self.logger.error(error_msg)
                 raise ValueError(error_msg)
-            self.save_results(metrics, save_path)
-
-    def save_results(self, metrics: pd.DataFrame, save_path: str) -> None:
-        """Method to save the model evaluation metrics
-        Args:
-            metrics: Evaluation metrics
-            save_path: Path to save the evaluation metrics
-        Returns:
-            None
-        """
-
-        self.logger.info("Saving the evaluation metrics.")
-        metrics.to_csv(save_path, index=True)
+            metrics.to_csv(save_path, index=True)

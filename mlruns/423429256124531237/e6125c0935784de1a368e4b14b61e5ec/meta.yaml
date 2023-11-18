@@ -1,0 +1,15 @@
+artifact_uri: file:///Users/neseuygun/Documents/GitHub/E2E-ML-Pipeline/mlruns/423429256124531237/e6125c0935784de1a368e4b14b61e5ec/artifacts
+end_time: null
+entry_point_name: ''
+experiment_id: '423429256124531237'
+lifecycle_stage: active
+run_id: e6125c0935784de1a368e4b14b61e5ec
+run_name: ambitious-owl-311
+run_uuid: e6125c0935784de1a368e4b14b61e5ec
+source_name: ''
+source_type: 4
+source_version: ''
+start_time: 1700319069297
+status: 1
+tags: []
+user_id: neseuygun

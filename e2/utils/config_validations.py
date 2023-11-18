@@ -1,12 +1,11 @@
 from typing import Union
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Extra
 
 
 class ModelParameters(BaseModel):
-    max_depth: int
-    random_state: int
-    n_estimators: Union[int, None] = None
+    class Config:
+        extra = Extra.allow
 
 
 class ParametersTraining(BaseModel):
