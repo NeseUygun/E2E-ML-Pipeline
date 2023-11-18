@@ -21,7 +21,7 @@ jobs:
 
       - name: Install dependencies
         run: |
-          poetry install --with dev --without main,linting
+          poetry install --with dev,main --without linting
 
       - name: Run unit tests
         run: |

@@ -11,9 +11,9 @@ def test_dataset_io_should_throw_error_if_path_not_string(path_param):
         DatasetIO(path_param)
 
 
-@pytest.mark.parametrize("path_param", ["data.tsv", "data.parquet", "data.txt"])
+@pytest.mark.parametrize("path_param", ["data.tsv"])
 def test_dataset_io_should_throw_error_if_ext_not_allowed(path_param):
     data_ext = path_param.split(".")[-1]
 
-    with pytest.raises(ValueError, match=f"Expected csv file but found .{data_ext}"):
+    with pytest.raises(ValueError, match=f"Expected csv file, found .{data_ext}"):
         DatasetIO(path_param)

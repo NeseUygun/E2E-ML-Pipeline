@@ -1,0 +1,19 @@
+model:
+  RandomForestClassifier:
+    hyperparameters:
+      n_estimators: [200, 400]
+      max_depth: [2, 7]
+      random_state: 234
+    parameters_training:
+      cv_folds: 0
+      overfitting_threshold: 0.1
+      optimization: True
+
+  DecisionTreeClassifier:
+    hyperparameters:
+      max_depth: 5
+      random_state: 234
+    parameters_training:
+      cv_folds: 0
+      overfitting_threshold: 0.1
+      optimization: True
