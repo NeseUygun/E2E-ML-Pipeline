@@ -10,14 +10,6 @@ from sklearn.preprocessing import OneHotEncoder, StandardScaler
 
 from e2.utils.logging_utils import get_logger
 
-"""
-Datayı oku --> dataset_io
-Preprocess --> preprocessor.py
-Model training --> training.py
-    -> CV uygulanabilir.
-        --> Sklearn pipeline'ı kullan.
-"""
-
 NUMERIC_FEATURES = [
     "Age",
     "Annual_Income",
